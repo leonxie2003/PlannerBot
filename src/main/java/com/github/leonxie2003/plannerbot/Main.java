@@ -9,7 +9,7 @@ public class Main {
 		DiscordApiBuilder builder = new DiscordApiBuilder();
 		DiscordApi api = builder.setToken("bottoken").login().join();
 		
-		Plan plan = new Plan();
+		Plan plan = new Plan(null);
 		
 		api.addListener(new CommandListener(api, plan));
 	}

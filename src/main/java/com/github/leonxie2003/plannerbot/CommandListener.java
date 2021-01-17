@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.javacord.api.DiscordApi;
 import org.javacord.api.entity.channel.TextChannel;
+import org.javacord.api.entity.message.MessageAuthor;
 import org.javacord.api.entity.message.MessageBuilder;
 import org.javacord.api.entity.message.embed.EmbedBuilder;
 import org.javacord.api.event.message.MessageCreateEvent;
@@ -14,6 +15,7 @@ import org.javacord.api.listener.message.MessageCreateListener;
 public class CommandListener implements MessageCreateListener {
 	private DiscordApi api;
 	private Plan plan;
+	private ScheduledExecutorService scheduler;
 	
 	public CommandListener(DiscordApi api, Plan p) {
 		this.api = api;
@@ -30,7 +32,7 @@ public class CommandListener implements MessageCreateListener {
 		if (command.equals("!ping")) {
 			channel.sendMessage("pong!");
 	    } else if (command.equals("!newplan")) {
-			executeNewPlan(plan, channel);
+			executeNewPlan(plan, channel, event.getMessageAuthor());
 		} else if (command.equals("!add")) { 
 			executeAdd(plan, channel, st);
 		} else if (command.equals("!plan")) {
@@ -38,17 +40,23 @@ public class CommandListener implements MessageCreateListener {
 		} else if (command.equals("!addbreak")) {
 			executeAddBreak(plan, channel, st);
 		} else if (command.equals("!start")) {
-			executeStart(api, plan, channel);
+			scheduler = executeStart(api, plan, channel);
 		} else if (command.equals("!undo")) {
 			executeUndo(plan, channel);
 		} else if (command.equals("!end")) {
-			executeEnd(plan, channel);
+			executeEnd(plan, channel, scheduler);
+		} else if (command.equals("!clear")) {
+			executeClear(plan, channel);
+		} else if (command.equals("!help")) {
+			executeHelp(channel);
 		}
 	}
 	
-	private static void executeNewPlan(Plan plan, TextChannel channel) {
+	private static void executeNewPlan(Plan plan, TextChannel channel, MessageAuthor ma) {
 		plan.reset();
-		channel.sendMessage("Creating new plan...");
+		plan.changeUser(ma.asUser().get());
+		channel.sendMessage("Creating new plan for " + ma.asUser().get().getMentionTag() + "...");
+		executePlan(plan, channel);
 	}
 	
 	private static void executeAdd(Plan plan, TextChannel channel, StringTokenizer st) {
@@ -57,18 +65,22 @@ public class CommandListener implements MessageCreateListener {
 		try {
 			double time = Double.parseDouble(t);
 			plan.addTask(name, time);
-			channel.sendMessage("Adding " + name + ", lasting " + time + " minutes.");
+			channel.sendMessage("Adding " + name + ": " + time + " minutes");
 		} catch(NumberFormatException e) {
 			channel.sendMessage("Please enter a number for the time in minutes.");
 		}
 	}
 	
 	private static void executePlan(Plan plan, TextChannel channel) {
-		MessageBuilder mb = new MessageBuilder();
-		mb.setEmbed(new EmbedBuilder()
-				.setTitle("Plan")
-				.setDescription(plan.toString()));
-		mb.send(channel);
+		if(plan.getUser() == null) {
+			channel.sendMessage("Please create a new plan with !newplan.");
+		} else {
+			MessageBuilder mb = new MessageBuilder();
+			mb.setEmbed(new EmbedBuilder()
+					.setTitle("Plan")
+					.setDescription(plan.toString()));
+			mb.send(channel);	
+		}
 	}
 	
 	private static void executeAddBreak(Plan plan, TextChannel channel, StringTokenizer st) {
@@ -82,28 +94,54 @@ public class CommandListener implements MessageCreateListener {
 		}
 	}
 
-	private static void executeStart(DiscordApi api, Plan plan, TextChannel channel) {
+	private static ScheduledExecutorService executeStart(DiscordApi api, Plan plan, TextChannel channel) {
 		ScheduledExecutorService scheduler = api.getThreadPool().getScheduler();
 		long timeElapsed = 0;
 		for(int i = 0; i < plan.taskListSize(); i++) {
 			Task task = plan.getTask(i);
 			String name = task.getName();
 			long time = (long) (task.getTime() * 60);
-			scheduler.schedule(new MessageSender(name + " is starting...", channel), timeElapsed, TimeUnit.SECONDS);
-			scheduler.schedule(new MessageSender("You should still be working on: " + name, channel), time/2 + timeElapsed, TimeUnit.SECONDS);
-			scheduler.schedule(new MessageSender(name + " is complete!", channel), time + timeElapsed, TimeUnit.SECONDS);
+			scheduler.schedule(new MessageSender(plan.getUser().getMentionTag() + ": " + " Start working on " + name + " now!", channel), timeElapsed, TimeUnit.SECONDS);
+			scheduler.schedule(new MessageSender(plan.getUser().getMentionTag() + ": You should still be working on " + name + "!", channel), time/2 + timeElapsed, TimeUnit.SECONDS);
+			scheduler.schedule(new MessageSender(plan.getUser().getMentionTag()+ ": " + name + " is complete!", channel), time + timeElapsed, TimeUnit.SECONDS);
 			timeElapsed += time;
 		}
-		channel.sendMessage("Your plan has been completed!");
+		scheduler.schedule(new MessageSender(plan.getUser().getMentionTag()+ ": Your plan is completed! Good job!", channel), timeElapsed, TimeUnit.SECONDS);
+		return scheduler;
 	}
 	
 	private static void executeUndo(Plan plan, TextChannel channel) {
-		plan.removeTask(plan.getTask(plan.taskListSize()).getName());
+		plan.removeTask(plan.getTask(plan.taskListSize() - 1).getName());
 		channel.sendMessage("Undo completed!");
 	}
 	
-	private static void executeEnd(Plan plan, TextChannel channel) {
+	private static void executeEnd(Plan plan, TextChannel channel, ScheduledExecutorService scheduler) {
+		if (scheduler != null) {
+			scheduler.shutdown();	
+		}
 		plan.reset();
 		channel.sendMessage("Your plan ended early!");
+	}
+	
+	private static void executeClear(Plan plan, TextChannel channel) {
+		plan.reset();
+		channel.sendMessage("Cleared plan!");
+		executePlan(plan, channel);
+	}
+
+	private static void executeHelp(TextChannel channel) {
+		MessageBuilder mb = new MessageBuilder();
+		mb.setEmbed(new EmbedBuilder()
+				.setTitle("Help")
+				.setDescription("!newplan - Clears the current plan and creates a new one. \n" + 
+						"!plan - View the current plan. \n" + 
+						"!add task time - Add a new task to the current plan. \n" +
+						"!addbreak time - Add a break to the current plan. \n" + 
+						"!undo - Removes most recent task or break added. \n" + 
+						"!clear - Completely clear the current plan. \n" + 
+						"!remove task - Remove a specific task from the current plan. \n" +
+						"!start - Start the current plan. \n" + 
+						"!end - End the current plan early."));
+		mb.send(channel);
 	}
 }

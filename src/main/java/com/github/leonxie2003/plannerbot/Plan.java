@@ -2,14 +2,19 @@ package com.github.leonxie2003.plannerbot;
 
 import java.util.ArrayList;
 
+import org.javacord.api.entity.user.User;
+
 public class Plan {
 	private ArrayList<Task> tasks;
+	private User user;
 	
-	public Plan() {
+	public Plan(User u) {
+		user = u;
 		tasks = new ArrayList<Task>();
 	}
 	
-	public Plan(ArrayList<Task> t) {
+	public Plan(User u, ArrayList<Task> t) {
+		user = u;
 		tasks = new ArrayList<Task>();
 		for(int i = 0; i < t.size(); i++) {
 			tasks.add(t.get(i));
@@ -22,7 +27,7 @@ public class Plan {
 	}
 	
 	public void removeTask(String name) {
-		for(int i = tasks.size(); i >= 0; i--) {
+		for(int i = tasks.size() - 1; i >= 0; i--) {
 			if(tasks.get(i).getName().equals(name)) {
 				tasks.remove(i);
 				return;
@@ -50,12 +55,20 @@ public class Plan {
 		
 		String toReturn = "";
 		for(int i = 0; i < tasks.size(); i++) {
-			toReturn += (i+1) + ") " + tasks.get(i).getName() + ", lasting " + tasks.get(i).getTime() + " minutes. \n";
+			toReturn += (i+1) + ") " + tasks.get(i).getName() + ":  " + tasks.get(i).getTime() + " minutes \n";
 		}
 		return toReturn;
 	}
 
 	public int taskListSize() {
 		return tasks.size();
+	}
+	
+	public void changeUser(User newUser) {
+		user = newUser;
+	}
+	
+	public User getUser() {
+		return user;
 	}
 }
