@@ -7,7 +7,7 @@ public class Main {
 	public static void main(String[] args)
 	{
 		DiscordApiBuilder builder = new DiscordApiBuilder();
-		DiscordApi api = builder.setToken("ODAwMDU2ODQzMzkyMTIyOTMx.YAMk_w.Vpj0t_h8VgU3kZNldznePw_oWeo").login().join();
+		DiscordApi api = builder.setToken("bottoken").login().join();
 		
 		Plan plan = new Plan();
 		
